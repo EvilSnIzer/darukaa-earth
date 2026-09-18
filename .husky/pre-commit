@@ -1,0 +1,33 @@
+# Husky v9 hook: a plain POSIX script, no shebang or husky.sh preamble required.
+
+echo "==> lint-staged (Prettier + ESLint + Ruff on staged files)..."
+npx --no-install lint-staged || exit 1
+
+# Backend checks run over the whole tree rather than staged files only: ruff's
+# isort and mypy need the full import graph to be meaningful.
+if [ -f backend/pyproject.toml ]; then
+  RUFF_BIN="ruff"
+  MYPY_BIN="mypy"
+  # Prefer the project virtualenv when present so hooks match CI exactly.
+  if [ -x backend/.venv/bin/ruff ]; then RUFF_BIN="backend/.venv/bin/ruff"; fi
+  if [ -x backend/.venv/bin/mypy ]; then MYPY_BIN="backend/.venv/bin/mypy"; fi
+
+  if command -v "$RUFF_BIN" >/dev/null 2>&1 || [ -x "$RUFF_BIN" ]; then
+    echo "==> ruff check + format (backend)..."
+    "$RUFF_BIN" check backend/app backend/tests || exit 1
+    "$RUFF_BIN" format --check backend/app backend/tests || exit 1
+  else
+    echo "   ruff not installed - skipping (pip install -r backend/requirements-dev.txt)"
+  fi
+
+  if command -v "$MYPY_BIN" >/dev/null 2>&1 || [ -x "$MYPY_BIN" ]; then
+    echo "==> mypy (backend)..."
+    # --config-file is required: the hooks run from the repository root, where
+    # mypy would otherwise miss backend/pyproject.toml and its ignore settings.
+    "$MYPY_BIN" --config-file backend/pyproject.toml backend/app || exit 1
+  else
+    echo "   mypy not installed - skipping"
+  fi
+fi
+
+echo "==> Pre-commit checks passed."

@@ -1,0 +1,41 @@
+{
+  "name": "darukaa-earth",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Root workspace tooling for the Darukaa.Earth full-stack geospatial analytics platform (lint-staged + Husky + Prettier).",
+  "scripts": {
+    "prepare": "husky",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm --prefix frontend run lint",
+    "test": "npm --prefix frontend run test",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev || (cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000)"
+  },
+  "lint-staged": {
+    "frontend/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "frontend/**/*.{json,css,md}": [
+      "prettier --write"
+    ],
+    "*.{md,json,yml,yaml,css}": [
+      "prettier --write"
+    ],
+    "backend/**/*.py": [
+      "ruff format",
+      "ruff check --fix",
+      "ruff format"
+    ]
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

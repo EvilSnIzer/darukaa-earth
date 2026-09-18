@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+.venv
+__pycache__
+alembic/versions
+pnpm-lock.yaml
+package-lock.json
+docs/*.docx
