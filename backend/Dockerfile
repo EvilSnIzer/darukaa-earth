@@ -1,28 +1,40 @@
-# Multi-stage build: the builder resolves wheels (including psycopg's binary),
-# and the runtime image ships only the installed site-packages.
+# Multi-stage build: the builder installs every dependency into a virtualenv
+# and the runtime image ships only that venv plus the application code.
+# A venv (not `pip install --prefix=/install`) is essential: console scripts
+# created inside a venv carry the shebang `#!/opt/venv/bin/python`, so in the
+# runtime stage `alembic` and `uvicorn` resolve their own site-packages.
+# With the old --prefix approach the scripts ran under the system interpreter,
+# which never saw the prefixed site-packages and crashed with
+# `ModuleNotFoundError: No module named 'alembic.config'`.
 FROM python:3.12-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /build
 COPY requirements.txt .
-RUN pip install --prefix=/install -r requirements.txt
+RUN pip install -r requirements.txt
 
 FROM python:3.12-slim AS runtime
 
-# libgeos/libproj are runtime dependencies of Shapely's C extension.
+# curl is for the container HEALTHCHECK. GEOS and PROJ are NOT installed here:
+# Shapely's manylinux wheel bundles its own libgeos/libgeos_c, and the old
+# libgeos-c1v5 package name no longer exists on current Debian base images, which
+# made this line a hard build failure.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgeos-c1v5 libproj25 curl \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/install/bin:$PATH" \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app"
 
 WORKDIR /app
-COPY --from=builder /install /install
+COPY --from=builder /opt/venv /opt/venv
 COPY alembic.ini pyproject.toml ./
 COPY alembic ./alembic
 COPY app ./app
