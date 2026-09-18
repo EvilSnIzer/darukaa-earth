@@ -1,0 +1,70 @@
+# Local one-command environment: Postgres+PostGIS, the API, and the dashboard.
+#
+#   docker compose up --build
+#   -> API       http://localhost:8000/docs
+#   -> Dashboard http://localhost:5173
+#
+# The database is seeded on first boot via the `seed` one-shot service.
+name: darukaa-earth
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: darukaa
+      POSTGRES_PASSWORD: darukaa
+      POSTGRES_DB: darukaa
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U darukaa -d darukaa']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://darukaa:darukaa@db:5432/darukaa
+      BACKEND_CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    ports:
+      - '8000:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://darukaa:darukaa@db:5432/darukaa
+    command: sh -c "alembic upgrade head && python -m app.services.seed"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_modules:/app/node_modules
+    environment:
+      VITE_BACKEND_ORIGIN: http://api:8000
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  frontend_modules:

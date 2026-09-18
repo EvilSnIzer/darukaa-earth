@@ -1,0 +1,138 @@
+name: CI
+
+# Runs on every push and on PRs into main. Path filters keep unrelated changes
+# (e.g. docs-only commits) from paying for a full PostGIS-backed test run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests)
+    runs-on: ubuntu-latest
+
+    # PostGIS in a service container: the tests exercise real geometry types,
+    # GiST indexes and ST_Area(geography), which no SQLite stand-in can provide.
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: darukaa
+          POSTGRES_PASSWORD: darukaa
+          POSTGRES_DB: darukaa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U darukaa -d darukaa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DATABASE_URL: postgresql+psycopg://darukaa:darukaa@localhost:5432/darukaa
+      SECRET_KEY: ci-only-not-a-real-secret-key-value-0123456789
+      ENVIRONMENT: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check app tests
+
+      - name: Ruff format check
+        run: ruff format --check app tests
+
+      - name: Mypy type check
+        run: mypy app
+
+      - name: Verify migrations apply cleanly
+        run: |
+          alembic upgrade head
+          # `alembic check` fails if the models and the migration have drifted,
+          # which catches a forgotten `alembic revision` after a model change.
+          alembic check
+
+      - name: Pytest
+        run: pytest --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: warn
+
+  frontend:
+    name: Frontend (lint, types, tests, build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  formatting:
+    name: Prettier (whole repo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Prettier
+        run: npm install --no-save prettier@^3
+      - name: Check formatting
+        run: npx prettier --check .
