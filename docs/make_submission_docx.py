@@ -357,7 +357,7 @@ def build() -> Document:
         doc,
         "ruff check          All checks passed!\n"
         "ruff format         45 files already formatted\n"
-        "mypy                Success: no issues found in 38 source files\n"
+        "mypy                Success: no issues found in 37 source files\n"
         "eslint              clean, 0 warnings\n"
         "tsc -b --noEmit     clean\n"
         "pytest              69 passed\n"

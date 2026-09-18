@@ -440,7 +440,7 @@ CI exactly. A `.pre-commit-config.yaml` is also provided for teams that prefer `
 ```
 ruff check          All checks passed!
 ruff format         45 files already formatted
-mypy                Success: no issues found in 38 source files
+mypy                Success: no issues found in 37 source files
 eslint              clean, 0 warnings
 tsc -b --noEmit     clean
 pytest              69 passed
